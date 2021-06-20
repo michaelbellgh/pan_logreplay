@@ -8,7 +8,7 @@ Does not send live traffic, just simulates it against the rulebase
 
 # Usage
 
-    python3 <input_logs> <output_report> <PANOS-FW> <apikey>
+    python3 pan_logreplay.py <input_logs> <output_report> <PANOS-FW> <apikey>
 
 Where:
 
