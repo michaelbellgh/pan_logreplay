@@ -107,9 +107,19 @@ def create_comparison_csv(input_csv_filename: str, output_csv_filename: str, cli
 
     for row in rows:
         xml_output = get_rule_match(row, client)
+        if not client.check_errors(xml_output):
+            print("Error on row: " + str(row))
+            continue
 
         root_node = ET.fromstring(xml_output)
-        new_rule_name = root_node.find("./result/rules/entry").attrib["name"]
+
+        # Check if the result is empty. If so, we havent hit any rules
+        new_rule_name = ""
+        if len(root_node.find("result")) == 0:
+            new_rule_name = "[None]"
+        else:
+            #We have hit a named rule, record it here
+            new_rule_name = root_node.find("./result/rules/entry").attrib["name"]
 
         new_row = row
         new_row["New Rule"] = new_rule_name
