@@ -1,6 +1,8 @@
 # pan_logreplay
 
-A utility which allows you to replay log exports (CSV format, from PANOS directly) against a live firewall using the test security-policy-match API function.
+For Palo Alto Networks Firewalls
+
+A utility which allows you to replay log exports (CSV format, from Palo Alto Networks firewall's directly) against a live PANOS firewall using the test security-policy-match API function.
 
 Does not send live traffic, just simulates it against the rulebase
 
