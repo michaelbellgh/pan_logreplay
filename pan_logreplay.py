@@ -3,6 +3,7 @@ import panclient
 import csv, argparse
 from requests.utils import quote
 import xml.etree.ElementTree as ET
+from distutils.version import LooseVersion, StrictVersion
 
 def get_matchable_rows(csv_logfile: str):
     #Get rid of the BoM marker by using utf-8-sig
@@ -66,7 +67,7 @@ def translate_ip_protocol(protocol: str):
         #TODO: Check IPSEC/ESP protocols
         return int(protocol)
 
-def get_rule_match(normalised_row: dict, client: panclient.PanClient):
+def get_rule_match(normalised_row: dict, client: panclient.PanClient, pre_81=False):
     ignored_keys = ["Old Rule"]
     element_string = "<test><security-policy-match>"
     for key, value in normalised_row.items():
@@ -89,7 +90,20 @@ def get_rule_match(normalised_row: dict, client: panclient.PanClient):
     result = client.get_xml_response("op", {"cmd" : quote(element_string)})
     return result
 
+def is_pre_81_version(client: panclient.PanClient):
+    result = client.get_xml_response("op", {"cmd" : "<show><system><info></info></system></show>"})
+    if not client.check_errors(result):
+        print("Error getting version from PANOS")
+    
+    root_node = ET.fromstring(result)
+    version_text = root_node.find("result/system/sw-version").text
+    return LooseVersion(version_text) < LooseVersion("8.1.0")
+
 def create_comparison_csv(input_csv_filename: str, output_csv_filename: str, client: panclient.PanClient, output_progress: bool=True):
+
+    #PANOS 8.1 and below have a 31 rulename char limit
+    rulename_31_limit = is_pre_81_version(client)
+
     rows = get_matchable_rows(input_csv_filename)
     if len(rows) == 0:
         raise Exception("No valid rows found in " + input_csv_filename)
@@ -106,23 +120,31 @@ def create_comparison_csv(input_csv_filename: str, output_csv_filename: str, cli
     count = len(rows)
 
     for row in rows:
-        xml_output = get_rule_match(row, client)
+        xml_output = get_rule_match(row, client, pre_81=True)
         if not client.check_errors(xml_output):
             print("Error on row: " + str(row))
             continue
 
         root_node = ET.fromstring(xml_output)
 
-        # Check if the result is empty. If so, we havent hit any rules
-        new_rule_name = ""
-        if len(root_node.find("result")) == 0:
-            new_rule_name = "[None]"
-        else:
-            #We have hit a named rule, record it here
-            new_rule_name = root_node.find("./result/rules/entry").attrib["name"]
+        try:
+            # Check if the result is empty. If so, we havent hit any rules
+            new_rule_name = ""
+            if len(root_node.find("result")) == 0:
+                new_rule_name = "[None]"
+            else:
+                #We have hit a named rule, record it here
+                new_rule_name = root_node.find("./result/rules/entry").attrib["name"]
+        except Exception as e:
+            print("Error while checking response. PANOS response below\n" + xml_output + "\n\n" + str(e))
+
+
 
         new_row = row
         new_row["New Rule"] = new_rule_name
+        if rulename_31_limit:
+            #Need to trim > 31 char rule names, since 8.1 and below only support 31 chars.
+            new_row['Old Rule'] = new_row["Old Rule"[:31]]
         new_row["Equal"] = (new_row["Old Rule"] == new_rule_name)
         writer.writerow(new_row)
         if output_progress:
