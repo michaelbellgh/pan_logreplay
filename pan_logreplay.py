@@ -43,6 +43,8 @@ def get_matchable_rows(csv_logfile: str):
             if key in row and key in csv_to_api_mappings:
                 new_key_name = csv_to_api_mappings[key]
                 #We need to convert TCP/UDP/ICMP to 6/17/1 (IP Protocol numbers)
+                if new_key_name == "Rule":
+                    new_normalised_row["Old Rule"] = value[:31]
                 if new_key_name == "protocol":
                     value = translate_ip_protocol(value)
                 new_normalised_row[new_key_name] = value
@@ -116,11 +118,18 @@ def create_comparison_csv(input_csv_filename: str, output_csv_filename: str, cli
     writer = csv.DictWriter(open(output_csv_filename, mode="w", newline=""), fieldnames=column_names)
     writer.writeheader()
 
+    
+
+
     position = 1
     count = len(rows)
 
     for row in rows:
-        xml_output = get_rule_match(row, client, pre_81=True)
+        if rulename_31_limit:
+            #If pre 8.1, we need to shorten old rule name
+            row["Old Rule"] = row["Old Rule"][:31]
+        xml_output = get_rule_match(row, client, pre_81=rulename_31_limit)
+        
         if not client.check_errors(xml_output):
             print("Error on row: " + str(row))
             continue
